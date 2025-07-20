@@ -102,7 +102,6 @@ if __name__ == '__main__':
     validate_resources("./terraform")
 
 
-    print("fuck my life")
 
 
 
