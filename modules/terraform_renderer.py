@@ -48,7 +48,7 @@ resource "aws_subnet" "public" {
   count = 2
   vpc_id                  = aws_vpc.main.id
   cidr_block              = "10.0.${count.index + 1}.0/24"
-  availability_zone = element({{ availability_zones }}, count.index)
+  availability_zone       = element(["us-east-1a", "us-east-1b"], count.index)
   map_public_ip_on_launch = true
 
   tags = {

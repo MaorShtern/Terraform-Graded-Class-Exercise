@@ -52,8 +52,7 @@ def Get_User_Variables():
         "ami": ami_choice,
         "instance_type": instance_type_choice,
         "region": region,
-        "availability_zone": "us-east-1a",  # used by EC2 instance
-        "availability_zones": ["us-east-1a", "us-east-1b"],  # used by subnets
+        "availability_zone": "us-east-1a",
         "load_balancer_name": alb_name
     }
 
