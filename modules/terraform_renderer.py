@@ -11,8 +11,8 @@ provider "aws" {
   region = "{{ region }}"
 }
 
-# Create a VPC
-resource "aws_vpc" "main_vpc" {
+# Create VPC
+resource "aws_vpc" "main" {
   cidr_block = "10.0.0.0/16"
 
   tags = {
@@ -20,34 +20,54 @@ resource "aws_vpc" "main_vpc" {
   }
 }
 
-# Create two subnets
-resource "aws_subnet" "subnet_a" {
-  vpc_id                  = aws_vpc.main_vpc.id
-  cidr_block              = "10.0.1.0/24"
-  availability_zone = "us-east-1a"
-  map_public_ip_on_launch = true
+# Create Internet Gateway
+resource "aws_internet_gateway" "igw" {
+  vpc_id = aws_vpc.main.id
 
   tags = {
-    Name = "subnet_a"
+    Name = "main_igw"
   }
 }
 
-resource "aws_subnet" "subnet_b" {
-  vpc_id                  = aws_vpc.main_vpc.id
-  cidr_block              = "10.0.2.0/24"
-  availability_zone = "us-east-1b"
-  map_public_ip_on_launch = true
+# Route Table for public subnets
+resource "aws_route_table" "public_rt" {
+  vpc_id = aws_vpc.main.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.igw.id
+  }
 
   tags = {
-    Name = "subnet_b"
+    Name = "public_rt"
   }
 }
 
-# Security Group
+# Public Subnets
+resource "aws_subnet" "public" {
+  count = 2
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = "10.0.${count.index + 1}.0/24"
+  availability_zone       = element(["us-east-1a", "us-east-1b"], count.index)
+  map_public_ip_on_launch = true
+
+  tags = {
+    Name = "public-subnet-${count.index + 1}"
+  }
+}
+
+# Associate subnets with route table
+resource "aws_route_table_association" "public_assoc" {
+  count          = 2
+  subnet_id      = aws_subnet.public[count.index].id
+  route_table_id = aws_route_table.public_rt.id
+}
+
+# Security Group for Load Balancer
 resource "aws_security_group" "lb_sg" {
-  name        = "lb_security_group_{{ load_balancer_name }}"
+  name        = "lb_security_group"
   description = "Allow HTTP inbound traffic"
-  vpc_id      = aws_vpc.main_vpc.id
+  vpc_id      = aws_vpc.main.id
 
   ingress {
     from_port   = 80
@@ -66,11 +86,11 @@ resource "aws_security_group" "lb_sg" {
 
 # EC2 Instance
 resource "aws_instance" "web_server" {
-  ami                    = "{{ ami }}"
-  instance_type          = "{{ instance_type }}"
-  availability_zone      = "{{ availability_zone }}"
-  subnet_id              = aws_subnet.subnet_a.id
-  vpc_security_group_ids = [aws_security_group.lb_sg.id]
+  ami                         = "{{ ami }}"
+  instance_type               = "{{ instance_type }}"
+  availability_zone           = "{{ availability_zone }}"
+  subnet_id                   = aws_subnet.public[0].id
+  vpc_security_group_ids      = [aws_security_group.lb_sg.id]
 
   tags = {
     Name = "WebServer"
@@ -83,16 +103,18 @@ resource "aws_lb" "application_lb" {
   internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.lb_sg.id]
-  subnets            = [aws_subnet.subnet_a.id, aws_subnet.subnet_b.id]
+  subnets            = aws_subnet.public[*].id
 }
 
+# Target Group
 resource "aws_lb_target_group" "web_target_group" {
-  name     = "web-target-group-{{ load_balancer_name }}"
+  name     = "web-target-group"
   port     = 80
   protocol = "HTTP"
-  vpc_id   = aws_vpc.main_vpc.id
+  vpc_id   = aws_vpc.main.id
 }
 
+# Listener
 resource "aws_lb_listener" "http_listener" {
   load_balancer_arn = aws_lb.application_lb.arn
   port              = 80
@@ -104,11 +126,13 @@ resource "aws_lb_listener" "http_listener" {
   }
 }
 
+# Attach EC2 to Target Group
 resource "aws_lb_target_group_attachment" "web_instance_attachment" {
   target_group_arn = aws_lb_target_group.web_target_group.arn
   target_id        = aws_instance.web_server.id
 }
 
+# Outputs
 output "instance_id" {
   value = aws_instance.web_server.id
 }
