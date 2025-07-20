@@ -98,5 +98,4 @@ output "load_balancer_dns" {
         except Exception as e:
             print(f"Error rendering Terraform config: {str(e)}")
 
-
             
