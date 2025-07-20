@@ -24,7 +24,7 @@ resource "aws_vpc" "main_vpc" {
 resource "aws_subnet" "subnet_a" {
   vpc_id                  = aws_vpc.main_vpc.id
   cidr_block              = "10.0.1.0/24"
-  availability_zone       = "{{ availability_zone }}"
+  availability_zone = "us-east-1a"
   map_public_ip_on_launch = true
 
   tags = {
@@ -35,7 +35,7 @@ resource "aws_subnet" "subnet_a" {
 resource "aws_subnet" "subnet_b" {
   vpc_id                  = aws_vpc.main_vpc.id
   cidr_block              = "10.0.2.0/24"
-  availability_zone       = "{{ availability_zone }}"
+  availability_zone = "us-east-1b"
   map_public_ip_on_launch = true
 
   tags = {
@@ -66,7 +66,7 @@ resource "aws_security_group" "lb_sg" {
 
 # EC2 Instance
 resource "aws_instance" "web_server" {
-  ami                    = "{{ ami_id }}"
+  ami                    = "{{ ami }}"
   instance_type          = "{{ instance_type }}"
   availability_zone      = "{{ availability_zone }}"
   subnet_id              = aws_subnet.subnet_a.id
