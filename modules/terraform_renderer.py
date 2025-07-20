@@ -11,30 +11,43 @@ provider "aws" {
   region = "{{ region }}"
 }
 
-variable "vpc_id" {
-  default = "vpc-0a691b1cda1dea4be"
-}
-
-variable "subnet_ids" {
-  default = ["subnet-09a9b4fe4e74051b3", "subnet-05860172a9327d826"]
-}
-
-resource "aws_instance" "web_server" {
-  ami                    = "{{ ami_id }}"
-  instance_type          = "{{ instance_type }}"
-  availability_zone      = "{{ availability_zone }}"
-  subnet_id              = var.subnet_ids[0]
-  vpc_security_group_ids = [aws_security_group.lb_sg.id]
+# Create a VPC
+resource "aws_vpc" "main_vpc" {
+  cidr_block = "10.0.0.0/16"
 
   tags = {
-    Name = "WebServer"
+    Name = "main_vpc"
   }
 }
 
+# Create two subnets
+resource "aws_subnet" "subnet_a" {
+  vpc_id                  = aws_vpc.main_vpc.id
+  cidr_block              = "10.0.1.0/24"
+  availability_zone       = "{{ availability_zone }}"
+  map_public_ip_on_launch = true
+
+  tags = {
+    Name = "subnet_a"
+  }
+}
+
+resource "aws_subnet" "subnet_b" {
+  vpc_id                  = aws_vpc.main_vpc.id
+  cidr_block              = "10.0.2.0/24"
+  availability_zone       = "{{ availability_zone }}"
+  map_public_ip_on_launch = true
+
+  tags = {
+    Name = "subnet_b"
+  }
+}
+
+# Security Group
 resource "aws_security_group" "lb_sg" {
   name        = "lb_security_group_{{ load_balancer_name }}"
   description = "Allow HTTP inbound traffic"
-  vpc_id      = var.vpc_id
+  vpc_id      = aws_vpc.main_vpc.id
 
   ingress {
     from_port   = 80
@@ -42,14 +55,42 @@ resource "aws_security_group" "lb_sg" {
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 }
 
+# EC2 Instance
+resource "aws_instance" "web_server" {
+  ami                    = "{{ ami_id }}"
+  instance_type          = "{{ instance_type }}"
+  availability_zone      = "{{ availability_zone }}"
+  subnet_id              = aws_subnet.subnet_a.id
+  vpc_security_group_ids = [aws_security_group.lb_sg.id]
+
+  tags = {
+    Name = "WebServer"
+  }
+}
+
+# Load Balancer
 resource "aws_lb" "application_lb" {
   name               = "{{ load_balancer_name }}"
   internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.lb_sg.id]
-  subnets            = var.subnet_ids
+  subnets            = [aws_subnet.subnet_a.id, aws_subnet.subnet_b.id]
+}
+
+resource "aws_lb_target_group" "web_target_group" {
+  name     = "web-target-group-{{ load_balancer_name }}"
+  port     = 80
+  protocol = "HTTP"
+  vpc_id   = aws_vpc.main_vpc.id
 }
 
 resource "aws_lb_listener" "http_listener" {
@@ -63,18 +104,10 @@ resource "aws_lb_listener" "http_listener" {
   }
 }
 
-resource "aws_lb_target_group" "web_target_group" {
-  name     = "web-target-group-{{ load_balancer_name }}"
-  port     = 80
-  protocol = "HTTP"
-  vpc_id   = var.vpc_id
-}
-
 resource "aws_lb_target_group_attachment" "web_instance_attachment" {
   target_group_arn = aws_lb_target_group.web_target_group.arn
   target_id        = aws_instance.web_server.id
 }
-
 
 output "instance_id" {
   value = aws_instance.web_server.id
