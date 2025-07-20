@@ -114,8 +114,8 @@ terraform_template = """
 
 
 def render_template(context):
-    ami = ami_options.get(context["ami_choice"].lower(), "ami-?????")
-    instance_type = instance_types.get(context["instance_type_choice"].lower(), "t3.small")
+    ami = ami_options.get(context["ami"].lower(), "ami-?????")
+    instance_type = instance_types.get(context["instance_type"].lower(), "t3.small")
 
     template_context = {
         "ami": ami,
@@ -129,5 +129,5 @@ def render_template(context):
     # with open("templates/main.tf.j2") as f:
     #     terraform_template = f.read()
 
-    template = jinja2.Template(terraform_template)
-    return template.render(template_context)
+    # template = jinja2.Template(terraform_template)
+    # return template.render(template_context)

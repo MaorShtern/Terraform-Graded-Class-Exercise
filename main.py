@@ -1,9 +1,13 @@
 import sys
 import jinja2
-from terraform_template import render_template
-from terraform_executor import execute_terraform
-from aws_validator import validate_resources
+from modules.terraform_renderer import TerraformRenderer
+from python_terraform import Terraform, IsFlagged
 
+
+ami_options = {
+    "ubuntu": "ami-0c995fbcf99222492",
+    "amazon linux": "ami-0915e09cc7ceee3ab"
+}
 
 
 
@@ -11,9 +15,9 @@ def Get_User_Variables():
     # --- AMI selection ---
     ami_choice = input("Choose between Ubuntu or Amazon Linux: ").strip().lower()
     if ami_choice == "ubuntu":
-        ami_choice = "ubuntu"
+        ami_choice = ami_options[ "ubuntu"]
     elif ami_choice in ["amazon linux", "linux"]:
-        ami_choice = "amazon linux"
+        ami_choice = ami_options["amazon linux"]
     else:
         print("❌ You must choose either 'Ubuntu' or 'Amazon Linux'!")
         sys.exit(1)
@@ -91,15 +95,77 @@ def write_to_file(content, path):
         f.write(content)
 
 
+
+def run_terraform():
+    tf = Terraform(working_dir='terraform')
+
+    print("\n=== Running terraform init ===")
+    rc, out, err = tf.init(capture_output=False)
+    if err and err.strip() != "":
+        print(f" Init failed:\n{err}")
+        sys.exit(1)
+
+    print("\n=== Running terraform plan ===")
+    rc, out, err = tf.plan(capture_output=False)
+    if err and err.strip() != "":
+        print(f" Plan failed:\n{err}")
+        sys.exit(1)
+
+    print("\n=== Running terraform apply ===")
+    rc, out, err = tf.apply(
+        skip_plan=True,
+        capture_output=False,
+        auto_approve=True,
+        no_color=IsFlagged,
+        lock=False 
+    )
+    if err and err.strip() != "":
+        print(f" Apply failed:\n{err}")
+        sys.exit(1)
+
+    print("\n Terraform apply completed successfully.")
+
+
+
+   
+def get_outputs():
+    try:
+        tf = Terraform(working_dir='terraform')
+        outputs = tf.output()
+        parsed_outputs = {}
+
+        print("\n=== Terraform Outputs ===")
+        for key, val in outputs.items():
+            value = val.get("value", "N/A")
+            parsed_outputs[key] = value
+            print(f"{key}: {value}")
+
+        return parsed_outputs
+
+    except Exception as e:
+        print(f"\n Failed to fetch outputs: {str(e)}")
+
+
+
+
 if __name__ == '__main__':
-    print("Build a Python-based AWS Infrastructure as Code (IaC) tool!")
-    print("Please enter the following details to create your infrastructure.\n")
 
-    context = Get_User_Variables()
+    try:
+        print("Build a Python-based AWS Infrastructure as Code (IaC) tool!")
+        print("Please enter the following details to create your infrastructure.\n")
 
-    rendered_tf = render_template(context)
-    execute_terraform(rendered_tf, "./terraform/main.tf")
-    validate_resources("./terraform")
+        context = Get_User_Variables()
+
+        renderer = TerraformRenderer()
+        renderer.render(context)
+
+        run_terraform()
+        get_outputs()
+
+
+    except Exception as e:
+        print(f"\n Unexpected error: {str(e)}")
+        sys.exit(1)
 
 
 
